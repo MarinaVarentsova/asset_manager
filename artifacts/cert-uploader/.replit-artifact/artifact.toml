@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Certificate Registry Uploader"
+version = "1.0.0"
+id = "artifacts/cert-uploader"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21799
+
+[services.development]
+run = "pnpm --filter @workspace/cert-uploader run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/cert-uploader", "run", "build" ]
+publicDir = "artifacts/cert-uploader/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21799"
+BASE_PATH = "/"
