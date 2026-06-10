@@ -102,12 +102,16 @@ function pluralRecords(n: number): string {
   return "записей";
 }
 
-function nextLeagueHint(pct: number, total: number, errors: number): { name: string; toFix: number } | null {
+function nextLeagueHint(
+  pct: number,
+  total: number,
+  errors: number,
+): { name: string; toFix: number; gem: string; color: string; bg: string; border: string; glow: string } | null {
   const next = LEAGUES.find((l) => l.threshold > pct);
   if (!next || total === 0) return null;
   const maxErrorsAllowed = Math.floor(total * (1 - next.threshold / 100));
   const toFix = Math.max(1, errors - maxErrorsAllowed);
-  return { name: next.shortName, toFix };
+  return { name: next.shortName, toFix, gem: next.gem, color: next.color, bg: next.bg, border: next.border, glow: next.glow };
 }
 
 const LOADING_MSGS = [
@@ -302,6 +306,23 @@ export default function App() {
             border: "1px solid #e0e7ff",
           }}
         >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.75rem",
+              background: "#f1f5fb",
+              border: "1px solid #e0e7ff",
+              borderRadius: 12,
+              padding: "0.75rem 1rem",
+              marginBottom: "1.5rem",
+            }}
+          >
+            <HardHat size={40} />
+            <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600, color: "#0c2d6b", lineHeight: 1.4 }}>
+              Привет, я Сертификатыч! Давай загрузим реестр 👋
+            </p>
+          </div>
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: "1.125rem" }}>
               <label style={labelStyle}>🔑 Пароль администратора</label>
@@ -442,9 +463,35 @@ export default function App() {
 
               {/* progress to next league */}
               {hint && (
-                <p style={{ margin: "0.875rem 0 0", fontSize: "0.8125rem", fontWeight: 600, color: league.color }}>
-                  ⬆ До {hint.name} лиги осталось исправить {hint.toFix} {pluralRecords(hint.toFix)}
-                </p>
+                <div
+                  style={{
+                    margin: "1.25rem auto 0",
+                    maxWidth: 440,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.875rem",
+                    background: hint.bg,
+                    border: `1px solid ${hint.border}`,
+                    borderRadius: 12,
+                    padding: "0.75rem 1rem",
+                    textAlign: "left",
+                  }}
+                >
+                  <span
+                    className="gem-glow"
+                    style={{ fontSize: "2.25rem", lineHeight: 1, flexShrink: 0, ["--gem-color" as string]: hint.glow }}
+                  >
+                    {hint.gem}
+                  </span>
+                  <div>
+                    <div style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: hint.color, opacity: 0.75 }}>
+                      Следующая цель — {hint.name} лига
+                    </div>
+                    <div style={{ fontSize: "0.875rem", fontWeight: 700, color: hint.color, marginTop: 2 }}>
+                      Осталось исправить {hint.toFix} {pluralRecords(hint.toFix)}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
 
