@@ -144,7 +144,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     if (hasErrors) {
       const errorWorkbook = XLSX.utils.book_new();
       const errorRowsData = errorIndices.map((i) => ({
-        [COL_ROW]: i + 1,
+        [COL_ROW]: i + 2,
         [COL_DOC]: cleanRows[i][COL_DOC],
         [COL_EXPERT]: cleanRows[i][COL_EXPERT],
         [COL_AREA]: cleanRows[i][COL_AREA],
