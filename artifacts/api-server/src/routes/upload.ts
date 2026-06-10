@@ -10,6 +10,7 @@ const COL_DOC = "Номер документа";
 const COL_EXPERT = "ФИО эксперта";
 const COL_AREA = "Область производства судебной экспертизы";
 const COL_VALIDITY = "Срок действия сертификата";
+const COL_ROW = "№ строки";
 const COL_ERRORS = "Ошибки";
 
 const DATE_RANGE_RE = /^(\d{2}\.\d{2}\.\d{4})-(\d{2}\.\d{2}\.\d{4})$/;
@@ -35,7 +36,7 @@ function normalizeDocNum(raw: string): string {
     .trim();
 }
 
-const DOC_NUM_RE = /^(№\s*)?(PS|AS)\s*(\d{6})$/;
+const DOC_NUM_RE = /^(№\s*)?(PS|AS|CS|CP)\s*(\d{4,6})$/;
 
 function canonicalDocNum(normalized: string): string | null {
   const m = DOC_NUM_RE.exec(normalized);
@@ -61,7 +62,6 @@ function extractRow(row: Record<string, unknown>): CleanRow {
 
 function validateRow(clean: CleanRow): string[] {
   const { [COL_DOC]: docNum, [COL_EXPERT]: expert, [COL_AREA]: area, [COL_VALIDITY]: validity } = clean;
-
   const anyFilled = docNum || expert || area || validity;
   if (!anyFilled) return [];
 
@@ -72,7 +72,7 @@ function validateRow(clean: CleanRow): string[] {
   } else {
     const norm = normalizeDocNum(docNum);
     if (!canonicalDocNum(norm)) {
-      errors.push("Номер документа должен быть в формате PS 000000, AS 000000, № PS 000000 или № AS 000000");
+      errors.push("Номер документа должен быть в формате PS/AS/CS/CP + 4–6 цифр");
     }
   }
 
@@ -130,19 +130,29 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     const cleanRows = rawRows.map(extractRow);
     const validationResults = cleanRows.map(validateRow);
-    const hasErrors = validationResults.some((e) => e.length > 0);
+
+    const nonEmptyIndices = cleanRows
+      .map((row, i) => ({ row, i }))
+      .filter(({ row }) => row[COL_DOC] || row[COL_EXPERT] || row[COL_AREA] || row[COL_VALIDITY])
+      .map(({ i }) => i);
+
+    const totalRows = nonEmptyIndices.length;
+    const errorIndices = nonEmptyIndices.filter((i) => validationResults[i].length > 0);
+    const errorRows = errorIndices.length;
+    const hasErrors = errorRows > 0;
 
     if (hasErrors) {
       const errorWorkbook = XLSX.utils.book_new();
-      const errorRows = cleanRows.map((row, i) => ({
-        [COL_DOC]: row[COL_DOC],
-        [COL_EXPERT]: row[COL_EXPERT],
-        [COL_AREA]: row[COL_AREA],
-        [COL_VALIDITY]: row[COL_VALIDITY],
+      const errorRowsData = errorIndices.map((i) => ({
+        [COL_ROW]: i + 1,
+        [COL_DOC]: cleanRows[i][COL_DOC],
+        [COL_EXPERT]: cleanRows[i][COL_EXPERT],
+        [COL_AREA]: cleanRows[i][COL_AREA],
+        [COL_VALIDITY]: cleanRows[i][COL_VALIDITY],
         [COL_ERRORS]: validationResults[i].join("; "),
       }));
-      const errorSheet = XLSX.utils.json_to_sheet(errorRows, {
-        header: [COL_DOC, COL_EXPERT, COL_AREA, COL_VALIDITY, COL_ERRORS],
+      const errorSheet = XLSX.utils.json_to_sheet(errorRowsData, {
+        header: [COL_ROW, COL_DOC, COL_EXPERT, COL_AREA, COL_VALIDITY, COL_ERRORS],
       });
       XLSX.utils.book_append_sheet(errorWorkbook, errorSheet, "Ошибки");
       const errorBuffer = XLSX.write(errorWorkbook, { type: "buffer", bookType: "xlsx" });
@@ -150,15 +160,15 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", 'attachment; filename="errors.xlsx"');
       res.setHeader("X-Upload-Status", "errors");
+      res.setHeader("X-Total-Rows", String(totalRows));
+      res.setHeader("X-Error-Rows", String(errorRows));
       res.send(errorBuffer);
       return;
     }
 
-    const dataRows = cleanRows.filter((row) => {
-      return row[COL_DOC] || row[COL_EXPERT] || row[COL_AREA] || row[COL_VALIDITY];
-    });
+    const validNonEmptyRows = nonEmptyIndices.map((i) => cleanRows[i]);
 
-    const sortedRows = [...dataRows].sort((a, b) => {
+    const sortedRows = [...validNonEmptyRows].sort((a, b) => {
       const da = endDateFromValidity(a[COL_VALIDITY]);
       const db = endDateFromValidity(b[COL_VALIDITY]);
       return db.getTime() - da.getTime();
@@ -219,6 +229,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     const jsFileBuffer = Buffer.from(jsContent, "utf-8");
     res.setHeader("X-Upload-Status", supabaseError ? "supabase-error" : "success");
     res.setHeader("X-Record-Count", String(outputRows.length));
+    res.setHeader("X-Total-Rows", String(totalRows));
     if (supabaseError) {
       res.setHeader("X-Supabase-Error", supabaseError);
     }

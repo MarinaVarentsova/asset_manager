@@ -1,0 +1,36 @@
+.sertifikych {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sertifikych-body {
+  font-size: 2rem;
+  line-height: 1;
+  display: block;
+}
+
+.sertifikych-hat {
+  position: absolute;
+  top: -4px;
+  right: -2px;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* Dancing animation for 100% quality */
+.sertifikych-dance .sertifikych-body {
+  display: inline-block;
+  animation: certDance 0.6s ease-in-out infinite alternate;
+  transform-origin: bottom center;
+}
+
+@keyframes certDance {
+  0%   { transform: rotate(-14deg) translateY(0px); }
+  50%  { transform: rotate(0deg) translateY(-4px); }
+  100% { transform: rotate(14deg) translateY(0px); }
+}
