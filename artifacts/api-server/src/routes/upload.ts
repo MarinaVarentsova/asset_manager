@@ -6,14 +6,12 @@ import { createClient } from "@supabase/supabase-js";
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
-const COLUMNS = {
-  docNum: "Номер документа",
-  expert: "ФИО эксперта",
-  area: "Область производства судебной экспертизы",
-  validity: "Срок действия сертификата",
-};
+const COL_DOC = "Номер документа";
+const COL_EXPERT = "ФИО эксперта";
+const COL_AREA = "Область производства судебной экспертизы";
+const COL_VALIDITY = "Срок действия сертификата";
+const COL_ERRORS = "Ошибки";
 
-const DOC_NUM_RE = /^(№\s*)?(PS|AS)\s*\d{6}$/;
 const DATE_RANGE_RE = /^(\d{2}\.\d{2}\.\d{4})-(\d{2}\.\d{2}\.\d{4})$/;
 
 function parseDate(s: string): Date | null {
@@ -25,58 +23,91 @@ function parseDate(s: string): Date | null {
   return dt;
 }
 
-function validateRows(rows: Record<string, unknown>[]): { valid: boolean; errors: string[] }[] {
-  return rows.map((row) => {
-    const docNum = String(row[COLUMNS.docNum] ?? "").trim();
-    const expert = String(row[COLUMNS.expert] ?? "").trim();
-    const area = String(row[COLUMNS.area] ?? "").trim();
-    const validity = String(row[COLUMNS.validity] ?? "").trim();
+function normalizeDocNum(raw: string): string {
+  return raw
+    .replace(/А/g, "A")
+    .replace(/Р/g, "P")
+    .replace(/С/g, "C")
+    .replace(/Е/g, "E")
+    .replace(/О/g, "O")
+    .replace(/Х/g, "X")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-    const anyFilled = docNum || expert || area || validity;
-    if (!anyFilled) {
-      return { valid: true, errors: [] };
-    }
+const DOC_NUM_RE = /^(№\s*)?(PS|AS)\s*(\d{6})$/;
 
-    const errors: string[] = [];
+function canonicalDocNum(normalized: string): string | null {
+  const m = DOC_NUM_RE.exec(normalized);
+  if (!m) return null;
+  return `№ ${m[2]} ${m[3]}`;
+}
 
-    if (!docNum) {
-      errors.push("Номер документа обязателен");
-    } else if (!DOC_NUM_RE.test(docNum)) {
+type CleanRow = {
+  [COL_DOC]: string;
+  [COL_EXPERT]: string;
+  [COL_AREA]: string;
+  [COL_VALIDITY]: string;
+};
+
+function extractRow(row: Record<string, unknown>): CleanRow {
+  return {
+    [COL_DOC]: String(row[COL_DOC] ?? "").trim(),
+    [COL_EXPERT]: String(row[COL_EXPERT] ?? "").trim(),
+    [COL_AREA]: String(row[COL_AREA] ?? "").trim(),
+    [COL_VALIDITY]: String(row[COL_VALIDITY] ?? "").trim(),
+  };
+}
+
+function validateRow(clean: CleanRow): string[] {
+  const { [COL_DOC]: docNum, [COL_EXPERT]: expert, [COL_AREA]: area, [COL_VALIDITY]: validity } = clean;
+
+  const anyFilled = docNum || expert || area || validity;
+  if (!anyFilled) return [];
+
+  const errors: string[] = [];
+
+  if (!docNum) {
+    errors.push("Номер документа обязателен");
+  } else {
+    const norm = normalizeDocNum(docNum);
+    if (!canonicalDocNum(norm)) {
       errors.push("Номер документа должен быть в формате PS 000000, AS 000000, № PS 000000 или № AS 000000");
     }
+  }
 
-    if (!expert) {
-      errors.push("ФИО эксперта обязательно");
+  if (!expert) {
+    errors.push("ФИО эксперта обязательно");
+  }
+
+  if (!area) {
+    errors.push("Область производства судебной экспертизы обязательна");
+  }
+
+  if (!validity) {
+    errors.push("Срок действия сертификата обязателен");
+  } else {
+    const match = DATE_RANGE_RE.exec(validity);
+    if (!match) {
+      errors.push("Срок действия должен быть в формате ДД.ММ.ГГГГ-ДД.ММ.ГГГГ");
     } else {
-      const words = expert.split(/\s+/).filter(Boolean);
-      if (words.length !== 3) {
-        errors.push("ФИО эксперта должно состоять из 3 слов");
+      const start = parseDate(match[1]);
+      const end = parseDate(match[2]);
+      if (!start) errors.push("Дата начала недействительна");
+      if (!end) errors.push("Дата окончания недействительна");
+      if (start && end && start > end) {
+        errors.push("Дата начала не может быть позже даты окончания");
       }
     }
+  }
 
-    if (!area) {
-      errors.push("Область производства судебной экспертизы обязательна");
-    }
+  return errors;
+}
 
-    if (!validity) {
-      errors.push("Срок действия сертификата обязателен");
-    } else {
-      const match = DATE_RANGE_RE.exec(validity);
-      if (!match) {
-        errors.push("Срок действия должен быть в формате ДД.ММ.ГГГГ-ДД.ММ.ГГГГ");
-      } else {
-        const start = parseDate(match[1]);
-        const end = parseDate(match[2]);
-        if (!start) errors.push("Дата начала недействительна");
-        if (!end) errors.push("Дата окончания недействительна");
-        if (start && end && start > end) {
-          errors.push("Дата начала не может быть позже даты окончания");
-        }
-      }
-    }
-
-    return { valid: errors.length === 0, errors };
-  });
+function endDateFromValidity(validity: string): Date {
+  const match = DATE_RANGE_RE.exec(validity);
+  if (!match) return new Date(0);
+  return parseDate(match[2]) ?? new Date(0);
 }
 
 router.post("/upload", upload.single("file"), async (req, res) => {
@@ -95,18 +126,24 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
 
-    const validations = validateRows(rows);
-    const hasErrors = validations.some((v) => v.errors.length > 0);
+    const cleanRows = rawRows.map(extractRow);
+    const validationResults = cleanRows.map(validateRow);
+    const hasErrors = validationResults.some((e) => e.length > 0);
 
     if (hasErrors) {
       const errorWorkbook = XLSX.utils.book_new();
-      const errorRows = rows.map((row, i) => ({
-        ...row,
-        Ошибки: validations[i].errors.join("; "),
+      const errorRows = cleanRows.map((row, i) => ({
+        [COL_DOC]: row[COL_DOC],
+        [COL_EXPERT]: row[COL_EXPERT],
+        [COL_AREA]: row[COL_AREA],
+        [COL_VALIDITY]: row[COL_VALIDITY],
+        [COL_ERRORS]: validationResults[i].join("; "),
       }));
-      const errorSheet = XLSX.utils.json_to_sheet(errorRows);
+      const errorSheet = XLSX.utils.json_to_sheet(errorRows, {
+        header: [COL_DOC, COL_EXPERT, COL_AREA, COL_VALIDITY, COL_ERRORS],
+      });
       XLSX.utils.book_append_sheet(errorWorkbook, errorSheet, "Ошибки");
       const errorBuffer = XLSX.write(errorWorkbook, { type: "buffer", bookType: "xlsx" });
 
@@ -117,23 +154,24 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       return;
     }
 
-    const dataRows = rows.filter((_, i) => validations[i].valid && (
-      String(rows[i][COLUMNS.docNum] ?? "").trim() ||
-      String(rows[i][COLUMNS.expert] ?? "").trim() ||
-      String(rows[i][COLUMNS.area] ?? "").trim() ||
-      String(rows[i][COLUMNS.validity] ?? "").trim()
-    ));
+    const dataRows = cleanRows.filter((row) => {
+      return row[COL_DOC] || row[COL_EXPERT] || row[COL_AREA] || row[COL_VALIDITY];
+    });
 
-    const jsContent = `getData(${JSON.stringify(
-      dataRows.map((row) => ({
-        [COLUMNS.docNum]: String(row[COLUMNS.docNum] ?? "").trim(),
-        [COLUMNS.expert]: String(row[COLUMNS.expert] ?? "").trim(),
-        [COLUMNS.area]: String(row[COLUMNS.area] ?? "").trim(),
-        [COLUMNS.validity]: String(row[COLUMNS.validity] ?? "").trim(),
-      })),
-      null,
-      2
-    )});\n`;
+    const sortedRows = [...dataRows].sort((a, b) => {
+      const da = endDateFromValidity(a[COL_VALIDITY]);
+      const db = endDateFromValidity(b[COL_VALIDITY]);
+      return db.getTime() - da.getTime();
+    });
+
+    const outputRows = sortedRows.map((row) => ({
+      [COL_DOC]: canonicalDocNum(normalizeDocNum(row[COL_DOC])) ?? row[COL_DOC],
+      [COL_EXPERT]: row[COL_EXPERT],
+      [COL_AREA]: row[COL_AREA],
+      [COL_VALIDITY]: row[COL_VALIDITY],
+    }));
+
+    const jsContent = `getData(${JSON.stringify(outputRows, null, 2)});\n`;
 
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -180,7 +218,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     const jsFileBuffer = Buffer.from(jsContent, "utf-8");
     res.setHeader("X-Upload-Status", supabaseError ? "supabase-error" : "success");
-    res.setHeader("X-Record-Count", String(dataRows.length));
+    res.setHeader("X-Record-Count", String(outputRows.length));
     if (supabaseError) {
       res.setHeader("X-Supabase-Error", supabaseError);
     }
