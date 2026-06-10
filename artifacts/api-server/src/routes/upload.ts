@@ -230,6 +230,10 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     res.setHeader("X-Upload-Status", supabaseError ? "supabase-error" : "success");
     res.setHeader("X-Record-Count", String(outputRows.length));
     res.setHeader("X-Total-Rows", String(totalRows));
+    if (!supabaseError) {
+      const publicUrl = `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/public/${bucket}/${currentPath}`;
+      res.setHeader("X-Storage-Url", publicUrl);
+    }
     if (supabaseError) {
       res.setHeader("X-Supabase-Error", supabaseError);
     }

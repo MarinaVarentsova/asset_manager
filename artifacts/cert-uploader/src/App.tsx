@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import "./app.css";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -8,88 +8,139 @@ type Status =
   | { kind: "loading" }
   | { kind: "errors"; blob: Blob; totalRows: number; errorRows: number }
   | { kind: "supabase-error"; blob: Blob; count: number; totalRows: number; supabaseError: string }
-  | { kind: "success"; blob: Blob; count: number; totalRows: number };
+  | { kind: "success"; blob: Blob; count: number; totalRows: number; storageUrl: string | null };
 
 type League = {
   name: string;
+  shortName: string;
+  threshold: number;
   color: string;
   bg: string;
   border: string;
+  glow: string;
   gem: string;
   message: string;
   dancing: boolean;
 };
 
-function getLeague(pct: number): League {
-  if (pct === 100) return {
-    name: "Бриллиантовая лига",
-    color: "#92400e",
-    bg: "#fffbeb",
-    border: "#f59e0b",
-    gem: "💎",
-    message: "Идеальный реестр. Ни одной ошибки. Сертификыч танцует.",
-    dancing: true,
-  };
-  if (pct >= 98) return {
-    name: "Алмазная лига",
-    color: "#0369a1",
-    bg: "#f0f9ff",
-    border: "#7dd3fc",
-    gem: "🔷",
-    message: "Почти безупречно. Реестр выглядит очень достойно.",
-    dancing: false,
-  };
-  if (pct >= 95) return {
-    name: "Рубиновая лига",
-    color: "#991b1b",
-    bg: "#fff1f2",
-    border: "#fda4af",
-    gem: "♦️",
-    message: "Сильный результат. До идеального реестра осталось немного.",
-    dancing: false,
-  };
-  if (pct >= 90) return {
-    name: "Сапфировая лига",
-    color: "#1e40af",
-    bg: "#eff6ff",
-    border: "#93c5fd",
-    gem: "🔹",
-    message: "Хороший уровень. Большая часть записей прошла проверку.",
-    dancing: false,
-  };
-  return {
+const LEAGUES: League[] = [
+  {
     name: "Изумрудная лига",
-    color: "#065f46",
-    bg: "#f0fdf4",
+    shortName: "Изумрудной",
+    threshold: 0,
+    color: "#047857",
+    bg: "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)",
     border: "#6ee7b7",
+    glow: "rgba(16,185,129,0.55)",
     gem: "🟢",
     message: "Старт качества есть. Сертификыч уже нашёл, где укрепить реестр.",
     dancing: false,
-  };
+  },
+  {
+    name: "Сапфировая лига",
+    shortName: "Сапфировой",
+    threshold: 90,
+    color: "#1d4ed8",
+    bg: "linear-gradient(135deg, #eff6ff 0%, #f0f7ff 100%)",
+    border: "#93c5fd",
+    glow: "rgba(59,130,246,0.55)",
+    gem: "🔵",
+    message: "Хороший уровень. Большая часть записей прошла проверку.",
+    dancing: false,
+  },
+  {
+    name: "Рубиновая лига",
+    shortName: "Рубиновой",
+    threshold: 95,
+    color: "#be123c",
+    bg: "linear-gradient(135deg, #fff1f2 0%, #fef2f2 100%)",
+    border: "#fda4af",
+    glow: "rgba(244,63,94,0.55)",
+    gem: "❤️",
+    message: "Сильный результат. До идеального реестра осталось совсем немного.",
+    dancing: false,
+  },
+  {
+    name: "Алмазная лига",
+    shortName: "Алмазной",
+    threshold: 98,
+    color: "#0369a1",
+    bg: "linear-gradient(135deg, #f0f9ff 0%, #ecfeff 100%)",
+    border: "#7dd3fc",
+    glow: "rgba(56,189,248,0.65)",
+    gem: "💎",
+    message: "Почти безупречно. Реестр выглядит очень достойно.",
+    dancing: false,
+  },
+  {
+    name: "Бриллиантовая лига",
+    shortName: "Бриллиантовой",
+    threshold: 100,
+    color: "#b45309",
+    bg: "linear-gradient(135deg, #fffbeb 0%, #fefce8 100%)",
+    border: "#fcd34d",
+    glow: "rgba(245,158,11,0.7)",
+    gem: "👑",
+    message: "Идеальный реестр. Ни одной ошибки. Сертификыч танцует.",
+    dancing: true,
+  },
+];
+
+function getLeague(pct: number): League {
+  if (pct >= 100) return LEAGUES[4];
+  if (pct >= 98) return LEAGUES[3];
+  if (pct >= 95) return LEAGUES[2];
+  if (pct >= 90) return LEAGUES[1];
+  return LEAGUES[0];
 }
 
-function Sertifikych({ state }: { state: "idle" | "error" | "dance" }) {
-  return (
-    <div className={`sertifikych ${state === "dance" ? "sertifikych-dance" : ""}`} title="Муравей Сертификыч">
-      <span className="sertifikych-body">🐜</span>
-      <span className="sertifikych-hat">{state === "error" ? "🔍" : "⛑️"}</span>
-    </div>
-  );
+function pluralRecords(n: number): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return "запись";
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "записи";
+  return "записей";
 }
 
-function StatCard({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
+function nextLeagueHint(pct: number, total: number, errors: number): { name: string; toFix: number } | null {
+  const next = LEAGUES.find((l) => l.threshold > pct);
+  if (!next || total === 0) return null;
+  const maxErrorsAllowed = Math.floor(total * (1 - next.threshold / 100));
+  const toFix = Math.max(1, errors - maxErrorsAllowed);
+  return { name: next.shortName, toFix };
+}
+
+const LOADING_MSGS = [
+  "⛏ Сертификыч исследует шахту...",
+  "🔍 Проверяем номера документов...",
+  "📅 Проверяем сроки действия сертификатов...",
+  "💎 Ищем ценные сертификаты...",
+  "📦 Сортируем найденные данные...",
+  "⚙ Формируем итоговый файл...",
+];
+
+function Sertifikych({ state, size = 44 }: { state: "idle" | "error" | "dance"; size?: number }) {
+  const hat = state === "error" ? "🔍" : state === "dance" ? "👑" : "⛑️";
+  const cls =
+    state === "dance" ? "sertifikych-dance" : state === "error" ? "sertifikych-error" : "sertifikych-idle";
   return (
-    <div style={{
-      background: "#fff",
-      border: "1px solid #e5e7eb",
-      borderRadius: 10,
-      padding: "0.875rem 1rem",
-      flex: 1,
-      minWidth: 100,
-      textAlign: "center" as const,
-    }}>
-      <div style={{ fontSize: "1.5rem", fontWeight: 700, color: accent ?? "#1e3a8a", lineHeight: 1.2 }}>{value}</div>
-      <div style={{ fontSize: "0.7rem", color: "#6b7280", marginTop: 4, lineHeight: 1.3 }}>{label}</div>
+    <div
+      className={`sertifikych ${cls}`}
+      style={{ width: size, height: size }}
+      title="Муравей Сертификыч"
+      aria-hidden
+    >
+      <span className="sertifikych-body" style={{ fontSize: size * 0.74 }}>
+        🐜
+      </span>
+      <span className="sertifikych-hat" style={{ fontSize: size * 0.42 }}>
+        {hat}
+      </span>
+      {state === "idle" && (
+        <span className="sertifikych-tool" style={{ fontSize: size * 0.4 }}>
+          ⛏
+        </span>
+      )}
     </div>
   );
 }
@@ -98,7 +149,19 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const [msgIndex, setMsgIndex] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const isLoading = status.kind === "loading";
+
+  useEffect(() => {
+    if (!isLoading) return;
+    setMsgIndex(0);
+    const id = setInterval(() => {
+      setMsgIndex((i) => Math.min(i + 1, LOADING_MSGS.length - 1));
+    }, 850);
+    return () => clearInterval(id);
+  }, [isLoading]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -117,7 +180,9 @@ export default function App() {
       if (!res.ok && !uploadStatus) {
         const text = await blob.text();
         let msg = "Ошибка сервера";
-        try { msg = JSON.parse(text).error ?? msg; } catch {}
+        try {
+          msg = JSON.parse(text).error ?? msg;
+        } catch {}
         setStatus({ kind: "idle" });
         alert(msg);
         return;
@@ -139,7 +204,8 @@ export default function App() {
         return;
       }
 
-      setStatus({ kind: "success", blob, count, totalRows });
+      const storageUrl = res.headers.get("X-Storage-Url");
+      setStatus({ kind: "success", blob, count, totalRows, storageUrl });
     } catch {
       setStatus({ kind: "idle" });
       alert("Ошибка соединения с сервером");
@@ -162,61 +228,94 @@ export default function App() {
     if (fileRef.current) fileRef.current.value = "";
   }
 
-  const isLoading = status.kind === "loading";
-
   const qualityPct = (() => {
     if (status.kind === "errors") {
-      return status.totalRows > 0
-        ? ((status.totalRows - status.errorRows) / status.totalRows) * 100
-        : 0;
+      return status.totalRows > 0 ? ((status.totalRows - status.errorRows) / status.totalRows) * 100 : 0;
     }
     if (status.kind === "success" || status.kind === "supabase-error") return 100;
     return null;
   })();
 
   const league = qualityPct !== null ? getLeague(qualityPct) : null;
-
   const showResult = status.kind !== "idle" && status.kind !== "loading";
-  const antState = status.kind === "errors" ? "error" : (league?.dancing ? "dance" : "idle");
+  const antState: "idle" | "error" | "dance" =
+    status.kind === "errors" ? "error" : league?.dancing ? "dance" : "idle";
+
+  const totalRows =
+    status.kind === "errors" || status.kind === "success" || status.kind === "supabase-error"
+      ? status.totalRows
+      : 0;
+  const errorRows = status.kind === "errors" ? status.errorRows : 0;
+  const correctRows = totalRows - errorRows;
+  const todayStr = new Date().toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" });
+  const hint = qualityPct !== null && league && !league.dancing ? nextLeagueHint(qualityPct, totalRows, errorRows) : null;
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "linear-gradient(135deg, #f0f4ff 0%, #f8fafc 100%)",
-      fontFamily: "'Inter', system-ui, sans-serif",
-      padding: "2rem 1rem",
-    }}>
-      <div style={{ maxWidth: 640, margin: "0 auto" }}>
-
+    <div
+      style={{
+        minHeight: "100vh",
+        background:
+          "radial-gradient(900px 400px at 50% -120px, #dbeafe 0%, transparent 70%), linear-gradient(180deg, #f1f5fb 0%, #f8fafc 100%)",
+        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+        padding: "2.5rem 1rem 3rem",
+        color: "#0f172a",
+      }}
+    >
+      <div style={{ maxWidth: 680, margin: "0 auto" }}>
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-            <div style={{ width: 36, height: 36, background: "#1e3a8a", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.2rem" }}>📋</div>
-            <h1 style={{ fontSize: "1.375rem", fontWeight: 700, color: "#1e3a8a", margin: 0 }}>
-              Загрузчик реестра сертификатов
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "1.25rem",
+            marginBottom: "1.75rem",
+            background: "linear-gradient(135deg, #0c2d6b 0%, #0c4b9d 100%)",
+            borderRadius: 18,
+            padding: "1.5rem 1.75rem",
+            color: "#fff",
+            boxShadow: "0 16px 40px rgba(12,45,107,0.28)",
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <h1 style={{ fontSize: "1.5rem", fontWeight: 800, margin: "0 0 0.4rem", letterSpacing: "-0.01em" }}>
+              ⛏ Шахта качества реестра
             </h1>
+            <p style={{ margin: 0, fontSize: "0.875rem", color: "#c7d8f5", lineHeight: 1.5 }}>
+              Загрузите Excel-файл и узнайте, какой драгоценный камень скрывается в вашем реестре.
+            </p>
           </div>
-          <p style={{ color: "#6b7280", fontSize: "0.875rem", margin: 0 }}>
-            Проверьте Excel-файл, обновите реестр и получите готовый JS-файл для резервной загрузки.
-          </p>
+          <div
+            style={{
+              background: "rgba(255,255,255,0.12)",
+              borderRadius: 14,
+              padding: "0.75rem",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Sertifikych state="idle" size={56} />
+          </div>
         </div>
 
         {/* Upload card */}
-        <div style={{
-          background: "#fff",
-          borderRadius: 14,
-          boxShadow: "0 4px 24px rgba(30,58,138,0.08)",
-          padding: "1.75rem 2rem",
-          marginBottom: "1.25rem",
-          border: "1px solid #e0e7ff",
-        }}>
+        <div
+          style={{
+            background: "#fff",
+            borderRadius: 16,
+            boxShadow: "0 4px 24px rgba(12,45,107,0.08)",
+            padding: "1.75rem 2rem",
+            marginBottom: "1.25rem",
+            border: "1px solid #e0e7ff",
+          }}
+        >
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: "1.125rem" }}>
-              <label style={labelStyle}>Пароль администратора</label>
+              <label style={labelStyle}>🔑 Пароль администратора</label>
               <input
                 type="password"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 required
                 style={inputStyle}
                 placeholder="Введите пароль"
@@ -225,17 +324,18 @@ export default function App() {
             </div>
 
             <div style={{ marginBottom: "1.25rem" }}>
-              <label style={labelStyle}>Excel-файл</label>
+              <label style={labelStyle}>📄 Excel-файл реестра</label>
               <input
                 ref={fileRef}
                 type="file"
                 accept=".xlsx,.xls"
                 required
-                onChange={e => setFile(e.target.files?.[0] ?? null)}
-                style={{ ...inputStyle, padding: "0.4rem 0.6rem", cursor: "pointer", color: "#374151" }}
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                style={{ ...inputStyle, padding: "0.45rem 0.6rem", cursor: "pointer", color: "#374151" }}
               />
-              <p style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: "0.375rem", marginBottom: 0 }}>
-                Ожидаемые колонки: Номер документа · ФИО эксперта · Область производства судебной экспертизы · Срок действия сертификата
+              <p style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: "0.45rem", marginBottom: 0, lineHeight: 1.4 }}>
+                Ожидаемые колонки: Номер документа · ФИО эксперта · Область производства судебной экспертизы · Срок
+                действия сертификата
               </p>
             </div>
 
@@ -244,171 +344,293 @@ export default function App() {
               disabled={isLoading}
               style={{
                 width: "100%",
-                padding: "0.7rem",
-                background: isLoading ? "#93c5fd" : "#1e3a8a",
+                padding: "0.8rem",
+                background: isLoading
+                  ? "#93c5fd"
+                  : "linear-gradient(135deg, #0c2d6b 0%, #0c4b9d 100%)",
                 color: "#fff",
                 border: "none",
-                borderRadius: 8,
+                borderRadius: 10,
                 fontSize: "0.9375rem",
-                fontWeight: 600,
+                fontWeight: 700,
                 cursor: isLoading ? "not-allowed" : "pointer",
                 letterSpacing: "0.01em",
-                transition: "background 0.2s",
+                boxShadow: isLoading ? "none" : "0 8px 20px rgba(12,45,107,0.25)",
+                transition: "transform 0.1s, box-shadow 0.2s",
               }}
             >
-              {isLoading ? "⏳ Проверяю файл..." : "✅ Проверить и загрузить"}
+              {isLoading ? "⛏ Идёт проверка..." : "💎 Проверить реестр"}
             </button>
           </form>
         </div>
 
-        {/* Result block */}
-        {showResult && league && (
-          <div style={{
-            background: "#fff",
-            borderRadius: 14,
-            boxShadow: "0 4px 24px rgba(30,58,138,0.07)",
-            border: `1px solid ${league.border}`,
-            overflow: "hidden",
-          }}>
-            {/* League banner */}
-            <div style={{
-              background: league.bg,
-              borderBottom: `1px solid ${league.border}`,
-              padding: "1.125rem 1.75rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "1rem",
-            }}>
-              <Sertifikych state={antState} />
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.2rem" }}>
-                  <span style={{ fontSize: "1.125rem" }}>{league.gem}</span>
-                  <span style={{ fontWeight: 700, fontSize: "0.9375rem", color: league.color }}>{league.name}</span>
-                </div>
-                <p style={{ margin: 0, fontSize: "0.8125rem", color: league.color, opacity: 0.85 }}>{league.message}</p>
-              </div>
-            </div>
-
-            {/* Stats row */}
-            {(() => {
-              const totalRows = status.kind === "errors" ? status.totalRows
-                : status.kind === "success" ? status.totalRows
-                : status.kind === "supabase-error" ? status.totalRows : 0;
-              const errorRows = status.kind === "errors" ? status.errorRows : 0;
-              const correctRows = totalRows - errorRows;
-              const pctDisplay = qualityPct !== null
-                ? (qualityPct === 100 ? "100%" : `${qualityPct.toFixed(2)}%`)
-                : "—";
-
-              return (
-                <div style={{ padding: "1.25rem 1.5rem", display: "flex", gap: "0.625rem", flexWrap: "wrap" as const }}>
-                  <StatCard label="Всего записей" value={totalRows} />
-                  <StatCard label="Корректных" value={correctRows} accent="#059669" />
-                  <StatCard label="С ошибками" value={errorRows} accent={errorRows > 0 ? "#dc2626" : "#059669"} />
-                  <StatCard label="Качество" value={pctDisplay} accent={league.color} />
-                </div>
-              );
-            })()}
-
-            {/* Status-specific content */}
-            <div style={{ padding: "0 1.5rem 1.5rem" }}>
-
-              {status.kind === "errors" && (
-                <div style={{
-                  background: "#fef2f2",
-                  border: "1px solid #fca5a5",
-                  borderRadius: 10,
-                  padding: "1rem 1.25rem",
-                }}>
-                  <p style={{ margin: "0 0 0.5rem", fontWeight: 600, color: "#991b1b", fontSize: "0.9rem" }}>
-                    🔎 Сертификыч нашёл записи, которые лучше поправить перед публикацией.
-                  </p>
-                  <p style={{ margin: "0 0 0.875rem", fontSize: "0.8125rem", color: "#7f1d1d" }}>
-                    Строк с ошибками: <strong>{status.errorRows}</strong> ({((status.errorRows / status.totalRows) * 100).toFixed(1)}%)
-                  </p>
-                  <p style={{ margin: "0 0 0.875rem", fontSize: "0.8125rem", color: "#6b7280" }}>
-                    Рабочий файл не обновлён. Данные на сайте остались прежними.
-                  </p>
-                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" as const, alignItems: "center" }}>
-                    <button
-                      onClick={() => downloadBlob(status.blob, "errors.xlsx")}
-                      style={actionBtn("#dc2626")}
-                    >
-                      ⬇ Скачать Excel с ошибками
-                    </button>
-                    <button onClick={reset} style={ghostBtn}>Загрузить другой файл</button>
-                  </div>
-                </div>
-              )}
-
-              {(status.kind === "success" || status.kind === "supabase-error") && (
-                <div>
-                  <div style={{
-                    background: "#f0fdf4",
-                    border: "1px solid #86efac",
-                    borderRadius: 10,
-                    padding: "1rem 1.25rem",
-                    marginBottom: "0.75rem",
-                  }}>
-                    <p style={{ margin: "0 0 0.35rem", fontWeight: 600, color: "#14532d", fontSize: "0.9rem" }}>
-                      ✅ Реестр успешно обновлён.
-                    </p>
-                    <p style={{ margin: "0 0 0.875rem", fontSize: "0.8125rem", color: "#166534" }}>
-                      Загружено записей: <strong>{status.count}</strong>
-                    </p>
-                    <p style={{ margin: "0 0 0.875rem", fontSize: "0.8125rem", color: "#6b7280" }}>
-                      Резервный JS-файл сохраните на случай ручного восстановления старой схемы.
-                    </p>
-                    <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" as const, alignItems: "center" }}>
-                      <button
-                        onClick={() => downloadBlob(status.blob, "table_sert_centr_sud_expert.js")}
-                        style={actionBtn("#1e3a8a")}
-                      >
-                        ⬇ Скачать готовый JS-файл
-                      </button>
-                      <button onClick={reset} style={ghostBtn}>Загрузить другой файл</button>
-                    </div>
-                  </div>
-
-                  {status.kind === "success" && (
-                    <div style={{
-                      background: "#f0f9ff",
-                      border: "1px solid #7dd3fc",
-                      borderRadius: 10,
-                      padding: "0.75rem 1.25rem",
-                      fontSize: "0.8125rem",
-                      color: "#0c4a6e",
-                    }}>
-                      ☁️ Файл в Storage обновлён. Тильда сможет забрать актуальные данные по новой ссылке.
-                    </div>
-                  )}
-
-                  {status.kind === "supabase-error" && (
-                    <div style={{
-                      background: "#fffbeb",
-                      border: "1px solid #fcd34d",
-                      borderRadius: 10,
-                      padding: "0.75rem 1.25rem",
-                      fontSize: "0.8125rem",
-                      color: "#78350f",
-                    }}>
-                      <p style={{ margin: "0 0 0.25rem", fontWeight: 600 }}>⚠️ Файл в Storage не обновился.</p>
-                      <p style={{ margin: "0 0 0.25rem" }}>Но готовый JS-файл сформирован. Его можно скачать и загрузить вручную старым способом.</p>
-                      <p style={{ margin: 0, fontSize: "0.75rem", opacity: 0.8 }}>{status.supabaseError}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
+        {/* Loading process */}
+        {isLoading && (
+          <div
+            className="rise-in"
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              boxShadow: "0 4px 24px rgba(12,45,107,0.07)",
+              border: "1px solid #e0e7ff",
+              padding: "1.75rem 2rem",
+              textAlign: "center",
+            }}
+          >
+            <Sertifikych state="error" size={56} />
+            <p key={msgIndex} className="fade-swap" style={{ margin: "1rem 0 1.25rem", fontWeight: 600, fontSize: "1rem", color: "#0c2d6b" }}>
+              {LOADING_MSGS[msgIndex]}
+            </p>
+            <div className="mine-progress" />
+            <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: "1rem" }}>
+              {LOADING_MSGS.map((_, i) => (
+                <span
+                  key={i}
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: i <= msgIndex ? "#0c4b9d" : "#cbd5e1",
+                    transition: "background 0.3s",
+                  }}
+                />
+              ))}
             </div>
           </div>
         )}
 
+        {/* Result */}
+        {showResult && league && qualityPct !== null && (
+          <div className="rise-in" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+            {/* Quality hero */}
+            <div
+              style={{
+                background: league.bg,
+                borderRadius: 18,
+                border: `1px solid ${league.border}`,
+                padding: "1.75rem",
+                boxShadow: "0 10px 30px rgba(12,45,107,0.08)",
+                textAlign: "center",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.5rem" }}>
+                <Sertifikych state={antState} size={60} />
+              </div>
+              <div
+                className="gem-glow"
+                style={{ fontSize: "3rem", lineHeight: 1, ["--gem-color" as string]: league.glow }}
+              >
+                {league.gem}
+              </div>
+              <div style={{ fontSize: "2.75rem", fontWeight: 800, color: league.color, lineHeight: 1.1, marginTop: "0.5rem" }}>
+                {qualityPct === 100 ? "100%" : `${qualityPct.toFixed(2)}%`}
+              </div>
+              <div style={{ fontSize: "0.75rem", fontWeight: 600, color: league.color, opacity: 0.7, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 2 }}>
+                🏆 Качество реестра
+              </div>
+              <div style={{ fontSize: "1.0625rem", fontWeight: 700, color: league.color, marginTop: "0.75rem" }}>
+                {league.gem} {league.name}
+              </div>
+              <p style={{ margin: "0.5rem auto 0", fontSize: "0.875rem", color: league.color, opacity: 0.9, maxWidth: 440, lineHeight: 1.5 }}>
+                {league.message}
+              </p>
+
+              {/* quality bar */}
+              <div style={{ maxWidth: 440, margin: "1.25rem auto 0" }}>
+                <div className="quality-bar">
+                  <div
+                    className="quality-bar-fill"
+                    style={{ width: `${Math.max(2, qualityPct)}%`, background: league.color }}
+                  />
+                </div>
+              </div>
+
+              {/* progress to next league */}
+              {hint && (
+                <p style={{ margin: "0.875rem 0 0", fontSize: "0.8125rem", fontWeight: 600, color: league.color }}>
+                  ⬆ До {hint.name} лиги осталось исправить {hint.toFix} {pluralRecords(hint.toFix)}
+                </p>
+              )}
+            </div>
+
+            {/* Mining cards */}
+            <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  flex: 1,
+                  minWidth: 200,
+                  background: "#fff",
+                  borderRadius: 14,
+                  border: "1px solid #bbf7d0",
+                  padding: "1.25rem 1.5rem",
+                  boxShadow: "0 4px 16px rgba(5,150,105,0.08)",
+                }}
+              >
+                <div style={{ fontSize: "1.75rem", lineHeight: 1 }}>💎</div>
+                <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "#047857", marginTop: "0.4rem" }}>{correctRows}</div>
+                <div style={{ fontSize: "0.8125rem", color: "#15803d", fontWeight: 600 }}>Найдено драгоценных сертификатов</div>
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  minWidth: 200,
+                  background: "#fff",
+                  borderRadius: 14,
+                  border: `1px solid ${errorRows > 0 ? "#fecaca" : "#e5e7eb"}`,
+                  padding: "1.25rem 1.5rem",
+                  boxShadow: errorRows > 0 ? "0 4px 16px rgba(220,38,38,0.08)" : "0 4px 16px rgba(15,23,42,0.04)",
+                }}
+              >
+                <div style={{ fontSize: "1.75rem", lineHeight: 1 }}>🪨</div>
+                <div style={{ fontSize: "1.75rem", fontWeight: 800, color: errorRows > 0 ? "#dc2626" : "#64748b", marginTop: "0.4rem" }}>{errorRows}</div>
+                <div style={{ fontSize: "0.8125rem", color: errorRows > 0 ? "#b91c1c" : "#64748b", fontWeight: 600 }}>Требуют обработки</div>
+              </div>
+            </div>
+
+            {/* Stats strip */}
+            <div
+              style={{
+                display: "flex",
+                gap: "0.75rem",
+                flexWrap: "wrap",
+                background: "#fff",
+                borderRadius: 14,
+                border: "1px solid #e2e8f0",
+                padding: "1rem 1.25rem",
+              }}
+            >
+              <MiniStat icon="📦" label="Всего записей" value={totalRows} color="#0c4b9d" />
+              <MiniStat icon="✅" label="Корректных записей" value={correctRows} color="#047857" />
+              <MiniStat icon="🪨" label="Записей с ошибками" value={errorRows} color={errorRows > 0 ? "#dc2626" : "#64748b"} />
+            </div>
+
+            {/* Action card */}
+            {status.kind === "errors" && (
+              <div
+                style={{
+                  background: "#fff7f7",
+                  border: "1px solid #fca5a5",
+                  borderRadius: 14,
+                  padding: "1.25rem 1.5rem",
+                }}
+              >
+                <p style={{ margin: "0 0 0.5rem", fontWeight: 700, color: "#991b1b", fontSize: "0.9375rem" }}>
+                  🐜 Сертификыч нашёл записи, которые лучше исправить до публикации.
+                </p>
+                <p style={{ margin: "0 0 0.875rem", fontSize: "0.8125rem", color: "#7f1d1d" }}>
+                  Строк с ошибками: <strong>{status.errorRows}</strong> ({((status.errorRows / status.totalRows) * 100).toFixed(1)}%)
+                </p>
+                <div
+                  style={{
+                    background: "#fef2f2",
+                    border: "1px solid #fecaca",
+                    borderRadius: 9,
+                    padding: "0.625rem 0.875rem",
+                    fontSize: "0.8125rem",
+                    color: "#7f1d1d",
+                    marginBottom: "1rem",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  ✋ Рабочий реестр не изменён. Данные на сайте остались прежними.
+                </div>
+                <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+                  <button onClick={() => downloadBlob(status.blob, "errors.xlsx")} style={actionBtn("#dc2626")}>
+                    ⬇ Скачать Excel с ошибками
+                  </button>
+                  <button onClick={reset} style={ghostBtn}>
+                    Загрузить другой файл
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(status.kind === "success" || status.kind === "supabase-error") && (
+              <div
+                style={{
+                  background: "#f0fdf4",
+                  border: "1px solid #86efac",
+                  borderRadius: 14,
+                  padding: "1.25rem 1.5rem",
+                }}
+              >
+                <p style={{ margin: "0 0 0.5rem", fontWeight: 700, color: "#14532d", fontSize: "0.9375rem" }}>
+                  🎉 Реестр успешно обновлён
+                </p>
+                <p style={{ margin: "0 0 0.25rem", fontSize: "0.8125rem", color: "#166534" }}>
+                  Загружено записей: <strong>{status.count}</strong>
+                </p>
+                <p style={{ margin: "0 0 0.875rem", fontSize: "0.8125rem", color: "#166534" }}>
+                  Дата загрузки: <strong>{todayStr}</strong>
+                </p>
+                <div
+                  style={{
+                    background: "#ecfdf5",
+                    border: "1px solid #bbf7d0",
+                    borderRadius: 9,
+                    padding: "0.625rem 0.875rem",
+                    fontSize: "0.8125rem",
+                    color: "#166534",
+                    marginBottom: "1rem",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  💾 Резервный JS-файл сохраните на случай ручного восстановления.
+                </div>
+
+                <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center", marginBottom: status.kind === "supabase-error" ? "1rem" : 0 }}>
+                  <button onClick={() => downloadBlob(status.blob, "table_sert_centr_sud_expert.js")} style={actionBtn("#0c4b9d")}>
+                    ⬇ Скачать готовый JS-файл
+                  </button>
+                  {status.kind === "success" && status.storageUrl && (
+                    <a href={status.storageUrl} target="_blank" rel="noopener noreferrer" style={{ ...ghostBtn, textDecoration: "none", display: "inline-block" }}>
+                      🔗 Открыть файл в Storage
+                    </a>
+                  )}
+                  <button onClick={reset} style={ghostBtn}>
+                    Загрузить другой файл
+                  </button>
+                </div>
+
+                {status.kind === "supabase-error" && (
+                  <div
+                    style={{
+                      background: "#fffbeb",
+                      border: "1px solid #fcd34d",
+                      borderRadius: 9,
+                      padding: "0.75rem 0.875rem",
+                      fontSize: "0.8125rem",
+                      color: "#78350f",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <p style={{ margin: "0 0 0.25rem", fontWeight: 700 }}>⚠️ Файл в Storage не обновился.</p>
+                    <p style={{ margin: 0 }}>
+                      Но готовый JS-файл сформирован и доступен для скачивания.
+                    </p>
+                    <p style={{ margin: "0.35rem 0 0", fontSize: "0.72rem", opacity: 0.75 }}>{status.supabaseError}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Footer */}
-        <p style={{ textAlign: "center", fontSize: "0.7rem", color: "#9ca3af", marginTop: "1.5rem" }}>
-          Палата судебных экспертов · Реестр сертификатов
+        <p style={{ textAlign: "center", fontSize: "0.72rem", color: "#94a3b8", marginTop: "2rem" }}>
+          🐜 Палата судебных экспертов · Реестр сертификатов
         </p>
       </div>
+    </div>
+  );
+}
+
+function MiniStat({ icon, label, value, color }: { icon: string; label: string; value: number; color: string }) {
+  return (
+    <div style={{ flex: 1, minWidth: 120, textAlign: "center" }}>
+      <div style={{ fontSize: "1rem", lineHeight: 1 }}>{icon}</div>
+      <div style={{ fontSize: "1.375rem", fontWeight: 800, color, marginTop: "0.3rem", lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: "0.72rem", color: "#64748b", marginTop: 2, lineHeight: 1.3 }}>{label}</div>
     </div>
   );
 }
@@ -416,16 +638,16 @@ export default function App() {
 const labelStyle: React.CSSProperties = {
   display: "block",
   fontSize: "0.8125rem",
-  fontWeight: 500,
-  color: "#374151",
-  marginBottom: "0.375rem",
+  fontWeight: 600,
+  color: "#334155",
+  marginBottom: "0.4rem",
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: "0.5rem 0.75rem",
+  padding: "0.6rem 0.85rem",
   border: "1px solid #d1d5db",
-  borderRadius: 7,
+  borderRadius: 9,
   fontSize: "0.875rem",
   boxSizing: "border-box",
   outline: "none",
@@ -437,22 +659,23 @@ function actionBtn(bg: string): React.CSSProperties {
     background: bg,
     color: "#fff",
     border: "none",
-    borderRadius: 7,
-    padding: "0.5rem 1rem",
+    borderRadius: 9,
+    padding: "0.6rem 1.1rem",
     fontSize: "0.8125rem",
-    fontWeight: 600,
+    fontWeight: 700,
     cursor: "pointer",
-    whiteSpace: "nowrap" as const,
+    whiteSpace: "nowrap",
   };
 }
 
 const ghostBtn: React.CSSProperties = {
-  background: "none",
-  border: "1px solid #d1d5db",
-  borderRadius: 7,
-  padding: "0.5rem 1rem",
+  background: "#fff",
+  border: "1px solid #cbd5e1",
+  borderRadius: 9,
+  padding: "0.6rem 1.1rem",
   fontSize: "0.8125rem",
-  color: "#6b7280",
+  color: "#475569",
+  fontWeight: 600,
   cursor: "pointer",
-  whiteSpace: "nowrap" as const,
+  whiteSpace: "nowrap",
 };
