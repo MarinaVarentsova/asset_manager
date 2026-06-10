@@ -140,32 +140,6 @@ function HardHat({ size = 56 }: { size?: number }) {
   );
 }
 
-function Sertifikych({ state, size = 44 }: { state: "idle" | "error" | "dance"; size?: number }) {
-  const hat = state === "error" ? "🔍" : state === "dance" ? "👑" : "⛑️";
-  const cls =
-    state === "dance" ? "sertifikych-dance" : state === "error" ? "sertifikych-error" : "sertifikych-idle";
-  return (
-    <div
-      className={`sertifikych ${cls}`}
-      style={{ width: size, height: size }}
-      title="Муравей Сертификыч"
-      aria-hidden
-    >
-      <span className="sertifikych-body" style={{ fontSize: size * 0.74 }}>
-        🐜
-      </span>
-      <span className="sertifikych-hat" style={{ fontSize: size * 0.42 }}>
-        {hat}
-      </span>
-      {state === "idle" && (
-        <span className="sertifikych-tool" style={{ fontSize: size * 0.4 }}>
-          ⛏
-        </span>
-      )}
-    </div>
-  );
-}
-
 export default function App() {
   const [password, setPassword] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -259,8 +233,6 @@ export default function App() {
 
   const league = qualityPct !== null ? getLeague(qualityPct) : null;
   const showResult = status.kind !== "idle" && status.kind !== "loading";
-  const antState: "idle" | "error" | "dance" =
-    status.kind === "errors" ? "error" : league?.dancing ? "dance" : "idle";
 
   const totalRows =
     status.kind === "errors" || status.kind === "success" || status.kind === "supabase-error"
@@ -398,7 +370,9 @@ export default function App() {
               textAlign: "center",
             }}
           >
-            <Sertifikych state="error" size={56} />
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <HardHat size={56} />
+            </div>
             <p key={msgIndex} className="fade-swap" style={{ margin: "1rem 0 1.25rem", fontWeight: 600, fontSize: "1rem", color: "#0c2d6b" }}>
               {LOADING_MSGS[msgIndex]}
             </p>
@@ -434,8 +408,8 @@ export default function App() {
                 textAlign: "center",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.5rem" }}>
-                <Sertifikych state={antState} size={60} />
+              <div style={{ fontSize: "0.9375rem", fontWeight: 700, color: league.color, marginBottom: "0.75rem" }}>
+                На какую лигу вы претендуете?
               </div>
               <div
                 className="gem-glow"
