@@ -86,3 +86,30 @@
   0%   { opacity: 0; transform: translateY(4px); }
   100% { opacity: 1; transform: translateY(0); }
 }
+
+/* ===== Fortune wheel ===== */
+.wheel-pendulum {
+  display: inline-block;
+  transform-origin: top center;
+}
+
+.wheel-swing {
+  animation: wheelSwing 3.6s ease-in-out infinite;
+}
+
+@keyframes wheelSwing {
+  0%, 100% { transform: rotate(-5deg); }
+  50%      { transform: rotate(5deg); }
+}
+
+.wheel-spin {
+  animation: wheelSpin 0.65s linear infinite;
+}
+
+@keyframes wheelSpin {
+  to { transform: rotate(360deg); }
+}
+
+.wheel-land {
+  transition: transform 4.6s cubic-bezier(0.16, 1, 0.3, 1);
+}

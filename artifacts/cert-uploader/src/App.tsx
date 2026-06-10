@@ -144,6 +144,156 @@ function HardHat({ size = 56 }: { size?: number }) {
   );
 }
 
+const WHEEL_COLORS = ["#10b981", "#3b82f6", "#f43f5e", "#38bdf8", "#f59e0b"];
+
+function CyclingGems() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setI((p) => (p + 1) % LEAGUES.length), 650);
+    return () => clearInterval(id);
+  }, []);
+  const l = LEAGUES[i];
+  return (
+    <span
+      className="gem-glow"
+      key={i}
+      aria-hidden
+      style={{ fontSize: "1.5rem", lineHeight: 1, flexShrink: 0, ["--gem-color" as string]: l.glow }}
+      title={l.name}
+    >
+      {l.gem}
+    </span>
+  );
+}
+
+function FortuneWheel({
+  phase,
+  targetIndex,
+  pct,
+  size = 172,
+}: {
+  phase: "idle" | "spinning" | "landed";
+  targetIndex: number | null;
+  pct: number | null;
+  size?: number;
+}) {
+  const [rotation, setRotation] = useState(0);
+  const rotRef = useRef(0);
+  const seg = 360 / LEAGUES.length;
+
+  useEffect(() => {
+    if (phase === "landed" && targetIndex !== null) {
+      const targetMod = 360 - (targetIndex * seg + seg / 2);
+      const base = rotRef.current + 5 * 360;
+      const baseMod = ((base % 360) + 360) % 360;
+      const delta = (targetMod - baseMod + 360) % 360;
+      const next = base + delta;
+      rotRef.current = next;
+      setRotation(next);
+    } else if (phase === "idle") {
+      rotRef.current = 0;
+      setRotation(0);
+    }
+  }, [phase, targetIndex, seg]);
+
+  const conic = `conic-gradient(${LEAGUES.map(
+    (_, i) => `${WHEEL_COLORS[i]} ${i * seg}deg ${(i + 1) * seg}deg`,
+  ).join(", ")})`;
+
+  const r = size * 0.33;
+  const center = size / 2;
+
+  const hubLabel =
+    phase === "landed" && pct !== null
+      ? pct === 100
+        ? "100%"
+        : `${pct.toFixed(0)}%`
+      : phase === "spinning"
+        ? "⛏"
+        : "🎯";
+
+  return (
+    <div className={`wheel-pendulum${phase === "idle" ? " wheel-swing" : ""}`} aria-hidden>
+      <div style={{ width: 2, height: 22, margin: "0 auto", background: "linear-gradient(#cbd5e1,#94a3b8)" }} />
+      <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#64748b", margin: "0 auto -6px", position: "relative", zIndex: 4 }} />
+      <div style={{ position: "relative", width: size, height: size }}>
+        <div
+          style={{
+            position: "absolute",
+            top: -1,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 0,
+            height: 0,
+            borderLeft: "9px solid transparent",
+            borderRight: "9px solid transparent",
+            borderTop: "16px solid #0c2d6b",
+            zIndex: 4,
+            filter: "drop-shadow(0 2px 2px rgba(0,0,0,0.2))",
+          }}
+        />
+        <div
+          className={phase === "spinning" ? "wheel-spin" : phase === "landed" ? "wheel-land" : ""}
+          style={{
+            width: size,
+            height: size,
+            borderRadius: "50%",
+            background: conic,
+            border: "6px solid #fff",
+            boxShadow: "0 10px 30px rgba(12,45,107,0.25), inset 0 0 0 2px rgba(255,255,255,0.5)",
+            transform: phase === "landed" ? `rotate(${rotation}deg)` : undefined,
+            position: "relative",
+          }}
+        >
+          {LEAGUES.map((l, i) => {
+            const a = ((i * seg + seg / 2 - 90) * Math.PI) / 180;
+            const x = center + r * Math.cos(a);
+            const y = center + r * Math.sin(a);
+            return (
+              <span
+                key={i}
+                style={{
+                  position: "absolute",
+                  left: x,
+                  top: y,
+                  transform: "translate(-50%, -50%)",
+                  fontSize: size * 0.13,
+                  lineHeight: 1,
+                  filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.3))",
+                }}
+              >
+                {l.gem}
+              </span>
+            );
+          })}
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: size * 0.36,
+            height: size * 0.36,
+            borderRadius: "50%",
+            background: "#fff",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.22)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontWeight: 800,
+            fontSize: phase === "landed" ? size * 0.115 : size * 0.15,
+            color: "#0c2d6b",
+            zIndex: 3,
+          }}
+        >
+          {hubLabel}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [password, setPassword] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -238,6 +388,13 @@ export default function App() {
   const league = qualityPct !== null ? getLeague(qualityPct) : null;
   const showResult = status.kind !== "idle" && status.kind !== "loading";
 
+  const wheelPhase: "idle" | "spinning" | "landed" = isLoading
+    ? "spinning"
+    : showResult && league
+      ? "landed"
+      : "idle";
+  const targetIndex = league ? LEAGUES.indexOf(league) : null;
+
   const totalRows =
     status.kind === "errors" || status.kind === "success" || status.kind === "supabase-error"
       ? status.totalRows
@@ -295,6 +452,11 @@ export default function App() {
           </div>
         </div>
 
+        {/* Hanging fortune wheel */}
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: "1.5rem", marginTop: "-0.25rem" }}>
+          <FortuneWheel phase={wheelPhase} targetIndex={targetIndex} pct={qualityPct} />
+        </div>
+
         {/* Upload card */}
         <div
           style={{
@@ -339,14 +501,28 @@ export default function App() {
 
             <div style={{ marginBottom: "1.25rem" }}>
               <label style={labelStyle}>📄 Excel-файл реестра</label>
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".xlsx,.xls"
-                required
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                style={{ ...inputStyle, padding: "0.45rem 0.6rem", cursor: "pointer", color: "#374151" }}
-              />
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  borderRadius: 16,
+                  padding: "0.85rem 1rem",
+                  background: "linear-gradient(135deg, #eff6ff 0%, #ecfdf5 100%)",
+                  border: "1.5px dashed #93c5fd",
+                  boxShadow: "0 0 0 4px rgba(147,197,253,0.15)",
+                }}
+              >
+                <CyclingGems />
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  required
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  style={{ ...inputStyle, padding: "0.45rem 0.6rem", cursor: "pointer", color: "#374151", borderRadius: 12, background: "#fff", flex: 1, minWidth: 0 }}
+                />
+              </div>
               <p style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: "0.45rem", marginBottom: 0, lineHeight: 1.4 }}>
                 Ожидаемые колонки: Номер документа · ФИО эксперта · Область производства судебной экспертизы · Срок
                 действия сертификата
