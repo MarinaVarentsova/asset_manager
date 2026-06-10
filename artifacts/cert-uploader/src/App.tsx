@@ -119,6 +119,27 @@ const LOADING_MSGS = [
   "⚙ Формируем итоговый файл...",
 ];
 
+function HardHat({ size = 56 }: { size?: number }) {
+  return (
+    <div className="hardhat-hang" style={{ width: size, height: size }} title="Строительная каска" aria-hidden>
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="32" cy="56" rx="20" ry="3.5" fill="rgba(0,0,0,0.18)" />
+        <path d="M8 46 C8 44 9.5 42.5 12 42.5 L52 42.5 C54.5 42.5 56 44 56 46 L56 48 C56 49.5 54.7 50.5 53 50.5 L11 50.5 C9.3 50.5 8 49.5 8 48 Z" fill="#d97316" />
+        <path d="M16 44 C16 30 22 20 32 20 C42 20 48 30 48 44 Z" fill="#f97316" />
+        <path d="M16 44 C16 30 22 20 32 20 C42 20 48 30 48 44 Z" fill="url(#hatShine)" fillOpacity="0.35" />
+        <rect x="29.5" y="20.5" width="5" height="24" rx="2.5" fill="#ea580c" />
+        <ellipse cx="27" cy="29" rx="4" ry="6" fill="#fb923c" fillOpacity="0.55" />
+        <defs>
+          <linearGradient id="hatShine" x1="20" y1="20" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#ffffff" />
+            <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+  );
+}
+
 function Sertifikych({ state, size = 44 }: { state: "idle" | "error" | "dance"; size?: number }) {
   const hat = state === "error" ? "🔍" : state === "dance" ? "👑" : "⛑️";
   const cls =
@@ -278,7 +299,7 @@ export default function App() {
         >
           <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: "1.5rem", fontWeight: 800, margin: "0 0 0.4rem", letterSpacing: "-0.01em" }}>
-              ⛏ Шахта качества реестра
+              Загрузчик реестров
             </h1>
             <p style={{ margin: 0, fontSize: "0.875rem", color: "#c7d8f5", lineHeight: 1.5 }}>
               Загрузите Excel-файл и узнайте, какой драгоценный камень скрывается в вашем реестре.
@@ -294,7 +315,7 @@ export default function App() {
               justifyContent: "center",
             }}
           >
-            <Sertifikych state="idle" size={56} />
+            <HardHat size={56} />
           </div>
         </div>
 

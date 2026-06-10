@@ -3,6 +3,20 @@
   --mine-blue: #0c4b9d;
 }
 
+/* ===== Hanging hard hat ===== */
+.hardhat-hang {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: top center;
+  animation: hatSwing 3.2s ease-in-out infinite;
+}
+
+@keyframes hatSwing {
+  0%, 100% { transform: rotate(-7deg); }
+  50%      { transform: rotate(7deg); }
+}
+
 /* ===== Сертификыч ===== */
 .sertifikych {
   position: relative;
