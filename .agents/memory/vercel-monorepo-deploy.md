@@ -29,6 +29,21 @@ request to it with the *full original path preserved* (`/api/upload`), so Expres
 **Why:** Vercel rewrite destinations replace the URL the function receives unless you use a
 capture-preserving destination; the catch-all filename avoids the whole class of bug.
 
+## ESM/CJS conflict (ERR_REQUIRE_ESM)
+@vercel/node compiles `api/` per-file (it does NOT bundle into one file at runtime),
+so the function `require()`s the compiled upload route. The repo root is CJS (no
+`"type"`), but `artifacts/api-server` is `"type":"module"` — so `require()` of the
+ESM `upload.js` throws `ERR_REQUIRE_ESM`.
+**Fix (make the function ESM, scoped to `api/`):**
+- `api/package.json` = `{"type":"module"}` (scopes module type to the folder only;
+  does NOT touch root or Replit).
+- `api/tsconfig.json` → `module`+`moduleResolution`: `NodeNext`.
+- The cross-package import MUST carry an explicit `.js` extension under NodeNext/ESM:
+  `import uploadRouter from "../artifacts/api-server/src/routes/upload.js"`.
+**Why this is safe:** `upload.ts` has only bare-package imports (no relative imports)
+and already runs as ESM in the Replit api-server, so running it as ESM on Vercel is
+proven-good. CJS deps (express/multer/xlsx) load fine via ESM→CJS interop.
+
 ## Limits / verify
 - Vercel serverless request-body cap (~4.5MB Hobby) is **below** multer's 20MB limit — large
   uploads get a platform 413 before reaching Express. Registry files are tiny, so fine; just

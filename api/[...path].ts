@@ -3,7 +3,7 @@ import express, {
   type Response,
   type NextFunction,
 } from "express";
-import uploadRouter from "../artifacts/api-server/src/routes/upload";
+import uploadRouter from "../artifacts/api-server/src/routes/upload.js";
 
 // Vercel serverless entry. It reuses the EXACT same upload router (validation +
 // Supabase logic) as the standalone Replit Express server — no business logic
