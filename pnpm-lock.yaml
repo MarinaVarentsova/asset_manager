@@ -156,6 +156,19 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      '@supabase/supabase-js':
+        specifier: ^2.108.0
+        version: 2.108.0
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1
+      multer:
+        specifier: ^2.1.1
+        version: 2.1.1
+      xlsx:
+        specifier: ^0.18.5
+        version: 0.18.5
     devDependencies:
       prettier:
         specifier: ^3.8.3

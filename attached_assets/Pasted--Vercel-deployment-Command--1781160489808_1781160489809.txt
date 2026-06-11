@@ -1,0 +1,67 @@
+Проведи полный аудит проекта и приведи код в порядок.
+
+Сейчас Vercel deployment падает:
+Command "pnpm run build" exited with 1.
+
+Нужно:
+
+1. Проверить текущую структуру проекта.
+2. Исправить package.json:
+   - добавить корректный build script;
+   - добавить корректный start script;
+   - убрать/исправить нерабочие скрипты.
+3. Сделать проект совместимым с деплоем на Vercel из GitHub.
+4. Если используется backend, оформить его по правилам Vercel serverless functions через /api.
+5. Если используется frontend, убедиться, что есть корректная точка входа.
+6. После исправления указать:
+   - Build Command для Vercel;
+   - Output Directory для Vercel;
+   - какие Environment Variables нужны.
+
+Дополнительно провести рефакторинг по принципам ООП:
+
+- выделить отдельный сервис для чтения Excel;
+- отдельный сервис для валидации строк;
+- отдельный сервис для формирования JS-файла getData([...]);
+- отдельный сервис для работы с Supabase Storage;
+- отдельный сервис для формирования Excel-файла с ошибками;
+- отдельный контроллер/API-обработчик загрузки файла.
+
+Пример структуры:
+
+src/
+  services/
+    ExcelParserService.ts
+    CertificateValidatorService.ts
+    JsFileGeneratorService.ts
+    SupabaseStorageService.ts
+    ErrorExcelService.ts
+  controllers/
+    ImportController.ts
+  types/
+    certificate.ts
+  utils/
+    dateUtils.ts
+    normalizeUtils.ts
+
+Требования:
+
+- Не менять бизнес-логику.
+- Не создавать таблицы в Supabase.
+- Использовать только Supabase Storage.
+- Не хранить статистику между загрузками.
+- Все виджеты и лиги считать только по текущему Excel-файлу.
+- Сохранять итоговый файл в:
+  current/table_sert_centr_sud_expert.js
+- Делать backup в:
+  backups/
+- При ошибках не обновлять Storage.
+- При успешной загрузке отдавать пользователю готовый JS-файл для скачивания.
+- Итоговый JS-файл должен оставаться в формате:
+  getData([...]);
+
+После аудита:
+1. Исправь код.
+2. Запусти локальную проверку.
+3. Проверь, что build проходит.
+4. Подготовь проект к деплою на Vercel.

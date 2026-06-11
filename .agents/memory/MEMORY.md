@@ -1,0 +1,1 @@
+- [Vercel monorepo deploy](vercel-monorepo-deploy.md) — frontend static + Express upload route as `api/[...path].ts` catch-all (NOT a rewrite, which drops the path); reuses upload router, additive to Replit.
