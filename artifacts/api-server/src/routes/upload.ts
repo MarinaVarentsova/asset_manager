@@ -15,6 +15,16 @@ const COL_ERRORS = "Ошибки";
 
 const DATE_RANGE_RE = /^(\d{2}\.\d{2}\.\d{4})-(\d{2}\.\d{2}\.\d{4})$/;
 
+// Escape every non-ASCII character (e.g. Cyrillic) as a \uXXXX unicode escape so
+// the generated JS file is pure ASCII. This makes it render correctly in the
+// browser and on Tilda regardless of how Supabase Storage serves the file's
+// charset, while still executing as normal Cyrillic at runtime.
+function escapeNonAscii(str: string): string {
+  return str.replace(/[\u0080-\uFFFF]/g, (ch) => "\\u" + ch.charCodeAt(0).toString(16).padStart(4, "0"));
+}
+
+const JS_CONTENT_TYPE = "application/javascript; charset=utf-8";
+
 function parseDate(s: string): Date | null {
   const parts = s.split(".");
   if (parts.length !== 3) return null;
@@ -181,7 +191,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       [COL_VALIDITY]: row[COL_VALIDITY],
     }));
 
-    const jsContent = `getData(${JSON.stringify(outputRows, null, 2)});\n`;
+    const jsContent = `getData(${escapeNonAscii(JSON.stringify(outputRows, null, 2))});\n`;
 
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -210,7 +220,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       const backupBuffer = Buffer.from(await existing.arrayBuffer());
       const { error: backupErr } = await supabase.storage
         .from(bucket)
-        .upload(backupPath, backupBuffer, { contentType: "application/javascript", upsert: false });
+        .upload(backupPath, backupBuffer, { contentType: JS_CONTENT_TYPE, upsert: false });
       if (backupErr) {
         supabaseError = `Не удалось создать резервную копию: ${backupErr.message}`;
       }
@@ -220,7 +230,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       const jsBuffer = Buffer.from(jsContent, "utf-8");
       const { error: uploadErr } = await supabase.storage
         .from(bucket)
-        .upload(currentPath, jsBuffer, { contentType: "application/javascript", upsert: true });
+        .upload(currentPath, jsBuffer, { contentType: JS_CONTENT_TYPE, upsert: true });
       if (uploadErr) {
         supabaseError = `Не удалось загрузить файл в Supabase: ${uploadErr.message}`;
       }
@@ -237,7 +247,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     if (supabaseError) {
       res.setHeader("X-Supabase-Error", supabaseError);
     }
-    res.setHeader("Content-Type", "application/javascript");
+    res.setHeader("Content-Type", JS_CONTENT_TYPE);
     res.setHeader("Content-Disposition", 'attachment; filename="table_sert_centr_sud_expert.js"');
     res.send(jsFileBuffer);
   } catch (err) {
