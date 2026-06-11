@@ -12,6 +12,9 @@
   "packageManager": "pnpm@10.26.1",
   "private": true,
   "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.1.0",
+    "@types/node": "catalog:",
     "prettier": "^3.8.3",
     "typescript": "~5.9.3"
   },

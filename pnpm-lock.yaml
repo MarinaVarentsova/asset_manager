@@ -22,7 +22,7 @@ catalogs:
       specifier: ^5.90.21
       version: 5.100.9
     '@types/node':
-      specifier: ^25.3.3
+      specifier: 25.6.2
       version: 25.6.2
     '@types/react':
       specifier: ^19.2.0
@@ -170,6 +170,15 @@ importers:
         specifier: ^0.18.5
         version: 0.18.5
     devDependencies:
+      '@types/express':
+        specifier: ^5.0.6
+        version: 5.0.6
+      '@types/multer':
+        specifier: ^2.1.0
+        version: 2.1.0
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.6.2
       prettier:
         specifier: ^3.8.3
         version: 3.8.3
