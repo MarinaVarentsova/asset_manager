@@ -191,7 +191,18 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       [COL_VALIDITY]: row[COL_VALIDITY],
     }));
 
-    const jsContent = `getData(${escapeNonAscii(JSON.stringify(outputRows, null, 2))});\n`;
+    const dataLiteral = escapeNonAscii(JSON.stringify(outputRows, null, 2));
+    const jsContent =
+      `(function waitForGetData(){\n` +
+      `  var data = ${dataLiteral};\n` +
+      `  if (typeof window !== "undefined" && typeof window.getData === "function") {\n` +
+      `    window.getData(data);\n` +
+      `  } else if (typeof getData === "function") {\n` +
+      `    getData(data);\n` +
+      `  } else {\n` +
+      `    setTimeout(waitForGetData, 50);\n` +
+      `  }\n` +
+      `})();\n`;
 
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
