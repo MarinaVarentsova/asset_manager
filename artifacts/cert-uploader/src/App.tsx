@@ -294,7 +294,6 @@ function FortuneWheel({
 }
 
 export default function App() {
-  const [password, setPassword] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [msgIndex, setMsgIndex] = useState(0);
@@ -317,7 +316,6 @@ export default function App() {
     setStatus({ kind: "loading" });
 
     const form = new FormData();
-    form.append("password", password);
     form.append("file", file);
 
     try {
@@ -365,7 +363,6 @@ export default function App() {
   function reset() {
     setStatus({ kind: "idle" });
     setFile(null);
-    setPassword("");
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -478,19 +475,6 @@ export default function App() {
             </p>
           </div>
           <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: "1.125rem" }}>
-              <label style={labelStyle}>🔑 Пароль администратора</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                style={inputStyle}
-                placeholder="Введите пароль"
-                autoComplete="new-password"
-              />
-            </div>
-
             <div style={{ marginBottom: "1.25rem" }}>
               <label style={labelStyle}>📄 Excel-файл реестра</label>
               <div

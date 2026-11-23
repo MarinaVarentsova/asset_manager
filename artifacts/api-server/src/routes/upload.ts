@@ -121,12 +121,6 @@ function endDateFromValidity(validity: string): Date {
 
 router.post("/upload", upload.single("file"), async (req, res) => {
   try {
-    const password = req.body?.password as string | undefined;
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      res.status(401).json({ error: "Неверный пароль администратора" });
-      return;
-    }
-
     if (!req.file) {
       res.status(400).json({ error: "Файл не выбран" });
       return;
@@ -135,6 +129,25 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
+    if (!sheet || !sheet["!ref"]) {
+      res.status(400).json({ error: "Первый лист файла пуст. Загрузите реестр с заголовками и записями." });
+      return;
+    }
+
+    const requiredHeaders = [COL_DOC, COL_EXPERT, COL_AREA, COL_VALIDITY];
+    const headerRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", blankrows: true });
+    const headers = (headerRows[0] ?? []).map((value) => String(value));
+    const missing = requiredHeaders.filter((header) => !headers.includes(header));
+    const duplicates = requiredHeaders.filter((header) => headers.filter((value) => value === header).length > 1);
+    if (missing.length || duplicates.length) {
+      const details = [
+        missing.length ? `Отсутствуют обязательные колонки: ${missing.join("; ")}.` : "",
+        duplicates.length ? `Повторяются обязательные колонки: ${duplicates.join("; ")}.` : "",
+      ].filter(Boolean).join(" ");
+      res.status(400).json({ error: `Неверная структура первого листа. ${details}` });
+      return;
+    }
+
     const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
 
     const cleanRows = rawRows.map(extractRow);
@@ -146,6 +159,10 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       .map(({ i }) => i);
 
     const totalRows = nonEmptyIndices.length;
+    if (totalRows === 0) {
+      res.status(400).json({ error: "В файле нет записей сертификатов. Одних заголовков недостаточно для проверки." });
+      return;
+    }
     const errorIndices = nonEmptyIndices.filter((i) => validationResults[i].length > 0);
     const errorRows = errorIndices.length;
     const hasErrors = errorRows > 0;
