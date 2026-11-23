@@ -1,7 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
-import { createClient } from "@supabase/supabase-js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -204,60 +203,10 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       `  }\n` +
       `})();\n`;
 
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const bucket = process.env.SUPABASE_BUCKET;
-
-    if (!supabaseUrl || !supabaseKey || !bucket) {
-      res.status(500).json({ error: "Supabase не настроен" });
-      return;
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const ts =
-      `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_` +
-      `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-
-    const currentPath = "current/table_sert_centr_sud_expert.js";
-    const backupPath = `backups/table_sert_centr_sud_expert_${ts}.js`;
-
-    let supabaseError: string | null = null;
-
-    const { data: existing } = await supabase.storage.from(bucket).download(currentPath);
-    if (existing) {
-      const backupBuffer = Buffer.from(await existing.arrayBuffer());
-      const { error: backupErr } = await supabase.storage
-        .from(bucket)
-        .upload(backupPath, backupBuffer, { contentType: JS_CONTENT_TYPE, upsert: false });
-      if (backupErr) {
-        supabaseError = `Не удалось создать резервную копию: ${backupErr.message}`;
-      }
-    }
-
-    if (!supabaseError) {
-      const jsBuffer = Buffer.from(jsContent, "utf-8");
-      const { error: uploadErr } = await supabase.storage
-        .from(bucket)
-        .upload(currentPath, jsBuffer, { contentType: JS_CONTENT_TYPE, upsert: true });
-      if (uploadErr) {
-        supabaseError = `Не удалось загрузить файл в Supabase: ${uploadErr.message}`;
-      }
-    }
-
     const jsFileBuffer = Buffer.from(jsContent, "utf-8");
-    res.setHeader("X-Upload-Status", supabaseError ? "supabase-error" : "success");
+    res.setHeader("X-Upload-Status", "success");
     res.setHeader("X-Record-Count", String(outputRows.length));
     res.setHeader("X-Total-Rows", String(totalRows));
-    if (!supabaseError) {
-      const publicUrl = `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/public/${bucket}/${currentPath}`;
-      res.setHeader("X-Storage-Url", publicUrl);
-    }
-    if (supabaseError) {
-      res.setHeader("X-Supabase-Error", supabaseError);
-    }
     res.setHeader("Content-Type", JS_CONTENT_TYPE);
     res.setHeader("Content-Disposition", 'attachment; filename="table_sert_centr_sud_expert.js"');
     res.send(jsFileBuffer);

@@ -7,8 +7,7 @@ type Status =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "errors"; blob: Blob; totalRows: number; errorRows: number }
-  | { kind: "supabase-error"; blob: Blob; count: number; totalRows: number; supabaseError: string }
-  | { kind: "success"; blob: Blob; count: number; totalRows: number; storageUrl: string | null };
+  | { kind: "success"; blob: Blob; count: number; totalRows: number };
 
 type League = {
   name: string;
@@ -347,14 +346,7 @@ export default function App() {
 
       const count = Number(res.headers.get("X-Record-Count") ?? "0");
 
-      if (uploadStatus === "supabase-error") {
-        const supabaseError = res.headers.get("X-Supabase-Error") ?? "Неизвестная ошибка Supabase";
-        setStatus({ kind: "supabase-error", blob, count, totalRows, supabaseError });
-        return;
-      }
-
-      const storageUrl = res.headers.get("X-Storage-Url");
-      setStatus({ kind: "success", blob, count, totalRows, storageUrl });
+      setStatus({ kind: "success", blob, count, totalRows });
     } catch {
       setStatus({ kind: "idle" });
       alert("Ошибка соединения с сервером");
@@ -381,7 +373,7 @@ export default function App() {
     if (status.kind === "errors") {
       return status.totalRows > 0 ? ((status.totalRows - status.errorRows) / status.totalRows) * 100 : 0;
     }
-    if (status.kind === "success" || status.kind === "supabase-error") return 100;
+    if (status.kind === "success") return 100;
     return null;
   })();
 
@@ -396,7 +388,7 @@ export default function App() {
   const targetIndex = league ? LEAGUES.indexOf(league) : null;
 
   const totalRows =
-    status.kind === "errors" || status.kind === "success" || status.kind === "supabase-error"
+    status.kind === "errors" || status.kind === "success"
       ? status.totalRows
       : 0;
   const errorRows = status.kind === "errors" ? status.errorRows : 0;
@@ -763,7 +755,7 @@ export default function App() {
               </div>
             )}
 
-            {(status.kind === "success" || status.kind === "supabase-error") && (
+            {(status.kind === "success") && (
               <div
                 style={{
                   background: "#f0fdf4",
@@ -773,13 +765,13 @@ export default function App() {
                 }}
               >
                 <p style={{ margin: "0 0 0.5rem", fontWeight: 700, color: "#14532d", fontSize: "0.9375rem" }}>
-                  🎉 Реестр успешно обновлён
+                  🎉 Проверка завершена. JS-файл готов
                 </p>
                 <p style={{ margin: "0 0 0.25rem", fontSize: "0.8125rem", color: "#166534" }}>
-                  Загружено записей: <strong>{status.count}</strong>
+                  Обработано записей: <strong>{status.count}</strong>
                 </p>
                 <p style={{ margin: "0 0 0.875rem", fontSize: "0.8125rem", color: "#166534" }}>
-                  Дата загрузки: <strong>{todayStr}</strong>
+                  Дата обработки: <strong>{todayStr}</strong>
                 </p>
                 <div
                   style={{
@@ -793,42 +785,18 @@ export default function App() {
                     lineHeight: 1.5,
                   }}
                 >
-                  💾 Резервный JS-файл сохраните на случай ручного восстановления.
+                  💾 Скачайте готовый JS-файл. Автоматическая публикация отключена.
                 </div>
 
-                <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center", marginBottom: status.kind === "supabase-error" ? "1rem" : 0 }}>
+                <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
                   <button onClick={() => downloadBlob(status.blob, "table_sert_centr_sud_expert.js")} style={actionBtn("#0c4b9d")}>
                     ⬇ Скачать готовый JS-файл
                   </button>
-                  {status.kind === "success" && status.storageUrl && (
-                    <a href={status.storageUrl} target="_blank" rel="noopener noreferrer" style={{ ...ghostBtn, textDecoration: "none", display: "inline-block" }}>
-                      🔗 Открыть файл в Storage
-                    </a>
-                  )}
                   <button onClick={reset} style={ghostBtn}>
                     Загрузить другой файл
                   </button>
                 </div>
 
-                {status.kind === "supabase-error" && (
-                  <div
-                    style={{
-                      background: "#fffbeb",
-                      border: "1px solid #fcd34d",
-                      borderRadius: 9,
-                      padding: "0.75rem 0.875rem",
-                      fontSize: "0.8125rem",
-                      color: "#78350f",
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    <p style={{ margin: "0 0 0.25rem", fontWeight: 700 }}>⚠️ Файл в Storage не обновился.</p>
-                    <p style={{ margin: 0 }}>
-                      Но готовый JS-файл сформирован и доступен для скачивания.
-                    </p>
-                    <p style={{ margin: "0.35rem 0 0", fontSize: "0.72rem", opacity: 0.75 }}>{status.supabaseError}</p>
-                  </div>
-                )}
               </div>
             )}
           </div>
